@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>US Solana ETF Dashboard</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --bg2: #161b22;
+    --bg3: #21262d;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-muted: #8b949e;
+    --accent: #9945ff;
+    --accent-light: #c490ff;
+    --green: #3fb950;
+    --red: #f85149;
+    --yellow: #d29922;
+    --blue: #58a6ff;
+    --staking-glow: rgba(153, 69, 255, 0.10);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 14px;
+    min-height: 100vh;
+  }
+
+  header {
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    padding: 20px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .header-left h1 {
+    font-size: 22px;
+    font-weight: 700;
+    background: linear-gradient(90deg, #9945ff, #14f195);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    letter-spacing: -0.3px;
+  }
+
+  .header-left p {
+    color: var(--text-muted);
+    font-size: 13px;
+    margin-top: 4px;
+  }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .refresh-btn {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 0.2s;
+  }
+  .refresh-btn:hover { background: #2d333b; }
+  .refresh-btn.spinning .icon { display: inline-block; animation: spin 1s linear infinite; }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--green);
+    display: inline-block;
+    margin-right: 4px;
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+  .timestamp { color: var(--text-muted); font-size: 12px; }
+
+  .stats-bar {
+    display: flex;
+    gap: 0;
+    padding: 0 32px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg2);
+    flex-wrap: wrap;
+  }
+
+  .stat-item {
+    flex: 1;
+    min-width: 150px;
+    padding: 14px 20px;
+    border-right: 1px solid var(--border);
+  }
+  .stat-item:last-child { border-right: none; }
+  .stat-label { color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px; }
+  .stat-value { font-size: 20px; font-weight: 700; color: var(--text); }
+  .stat-value.accent { color: var(--accent-light); }
+  .stat-value.green  { color: var(--green); }
+
+  .legend {
+    display: flex;
+    gap: 20px;
+    padding: 10px 32px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--text-muted);
+    flex-wrap: wrap;
+  }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 2px; }
+
+  .table-wrap { padding: 24px 32px; overflow-x: auto; }
+
+  table { width: 100%; border-collapse: collapse; min-width: 1180px; }
+
+  thead th {
+    background: var(--bg2);
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+    padding: 12px 14px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+
+  tbody tr { border-bottom: 1px solid var(--border); transition: background 0.15s; }
+  tbody tr:hover { background: var(--bg2); }
+  tbody tr.staking-yes { background: var(--staking-glow); }
+  tbody tr.staking-yes:hover { background: rgba(153, 69, 255, 0.18); }
+
+  td { padding: 13px 14px; vertical-align: middle; white-space: nowrap; }
+
+  .ticker { font-weight: 700; font-size: 15px; color: var(--blue); font-family: 'SF Mono', 'Fira Code', monospace; }
+  .issuer { color: var(--text); font-weight: 500; }
+
+  .aum { font-weight: 600; font-size: 14px; }
+  .aum-live   { color: var(--green); }
+  .aum-static { color: var(--yellow); }
+  .aum-loading { color: var(--text-muted); font-style: italic; }
+
+  .price-live   { color: var(--text); font-variant-numeric: tabular-nums; }
+  .price-static { color: var(--yellow); font-variant-numeric: tabular-nums; }
+
+  .fee { color: var(--text); }
+  .fee-waived { color: var(--green); font-weight: 600; }
+
+  .staking-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 9px; border-radius: 12px; font-size: 11px;
+    font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .staking-active-badge { background: rgba(153,69,255,0.22); color: var(--accent-light); border: 1px solid rgba(153,69,255,0.38); }
+  .staking-waived-badge { background: rgba(63,185,80,0.18); color: var(--green); border: 1px solid rgba(63,185,80,0.35); }
+
+  .pct-green { color: var(--green); font-weight: 600; }
+  .pct-muted { color: var(--text-muted); }
+
+  .sub-note { font-size: 11px; color: var(--text-muted); display: block; margin-top: 2px; }
+  .sub-note-green { font-size: 11px; color: var(--green); display: block; margin-top: 2px; }
+
+  footer {
+    padding: 20px 32px;
+    border-top: 1px solid var(--border);
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 1.8;
+    background: var(--bg2);
+  }
+  footer a { color: var(--blue); text-decoration: none; }
+  footer strong { color: var(--text); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <h1>◎ US Solana ETF Dashboard</h1>
+    <p>All live US-listed Solana spot ETFs &amp; ETPs — sorted by AUM · staking yields · live prices</p>
+  </div>
+  <div class="header-right">
+    <span><span class="status-dot"></span><span class="timestamp" id="lastUpdated">Loading…</span></span>
+    <button class="refresh-btn" id="refreshBtn" onclick="doRefresh()">
+      <span class="icon" id="refreshIcon">↻</span> Refresh
+    </button>
+  </div>
+</header>
+
+<div class="stats-bar">
+  <div class="stat-item">
+    <div class="stat-label">Total ETFs</div>
+    <div class="stat-value">6</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-label">Total AUM</div>
+    <div class="stat-value accent" id="totalAum">—</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-label">Staking-Enabled</div>
+    <div class="stat-value green">6 / 6</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-label">SOL Price (live)</div>
+    <div class="stat-value" id="solPrice">—</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-label">Auto-refresh in</div>
+    <div class="stat-value"><span id="countdown">60</span>s</div>
+  </div>
+</div>
+
+<div class="legend">
+  <span class="legend-item"><span class="legend-dot" style="background:rgba(153,69,255,0.5)"></span> Staking commission active</span>
+  <span class="legend-item"><span class="legend-dot" style="background:rgba(63,185,80,0.3)"></span> Staking fee waived (limited period)</span>
+  <span class="legend-item"><span class="legend-dot" style="background:var(--green)"></span> Live from Yahoo Finance</span>
+  <span class="legend-item"><span class="legend-dot" style="background:var(--yellow)"></span> Fri Mar 27 close (API unavailable)</span>
+</div>
+
+<div class="table-wrap">
+  <table id="etfTable">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Ticker</th>
+        <th>Issuer</th>
+        <th>Exchange</th>
+        <th>AUM ↓</th>
+        <th>Price (Fri Close)</th>
+        <th>Exp. Ratio (Current)</th>
+        <th>Exp. Ratio (Target)</th>
+        <th>Staking</th>
+        <th>Commission (Current)</th>
+        <th>Commission (Target)</th>
+        <th>% Assets Staked</th>
+        <th>Gross Yield</th>
+        <th>Net Yield</th>
+      </tr>
+    </thead>
+    <tbody id="etfBody">
+      <tr><td colspan="14" style="text-align:center;color:var(--text-muted);padding:40px">Loading…</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<footer>
+  <strong>Data sources &amp; methodology (as of March 28, 2026)</strong><br>
+  <strong>AUM &amp; Price:</strong> Fetched live from Yahoo Finance API (quoteSummary + chart endpoints). Fallback = Fri Mar 27, 2026 close price (BSOL $11.07 · VSOL $10.91 · TSOL $8.00 · GSOL $6.15 · FSOL $9.76 · SOLC $16.27). AUM fallback = last known static value shown in yellow.<br>
+  <strong>Staking data:</strong> Sourced directly from issuer websites on Mar 28, 2026 —
+  <a href="https://bsoletf.com" target="_blank">BSOL (Bitwise)</a>: 99% staked, 6.76% gross / 6.36% net ·
+  <a href="https://etfs.grayscale.com/gsol" target="_blank">GSOL (Grayscale)</a>: 100% staked, 7.01% gross / 5.63% net ·
+  <a href="https://www.21shares.com/en-us/products-us/tsol" target="_blank">TSOL (21Shares)</a>: 99.77% staked ·
+  <a href="https://www.vaneck.com/us/en/investments/solana-etf-vsol/" target="_blank">VSOL (VanEck)</a>: 6.03% gross yield ·
+  FSOL (Fidelity) &amp; SOLC (Canary): % staked not publicly disclosed.<br>
+  <em>Not financial advice. Staking yields fluctuate with network conditions. Auto-refreshes every 60 seconds.</em>
+</footer>
+
+<script>
+// ─── Static ETF data — sorted by AUM descending, hardcoded from issuer sites Mar 28 2026 ───
+const ETF_DATA = [
+  {
+    ticker: 'BSOL',
+    issuer: 'Bitwise',
+    exchange: 'NYSE Arca',
+    expRatioCurrent: '0.20%',
+    expRatioTarget: '0.20%',
+    expWaiverNote: null,
+    commissionCurrent: '0.06%',
+    commissionTarget: '0.06%',
+    commissionNote: null,
+    feeWaived: false,
+    pctStaked: '99%',         // Source: bsoletf.com, Mar 28 2026
+    grossYield: '6.76%',      // Source: bsoletf.com, Mar 28 2026
+    netYield: '6.36%',        // Source: bsoletf.com, Mar 28 2026
+    staticAum: 596_200_000,
+    staticPrice: 11.07,       // Fri Mar 27 close, Yahoo Finance
+    description: 'Reinvests staking rewards (no distribution). Uses Helius / Bitwise Onchain Solutions validator. 0.06% commission on staking rewards.'
+  },
+  {
+    ticker: 'GSOL',
+    issuer: 'Grayscale',
+    exchange: 'NYSE Arca',
+    expRatioCurrent: '0.35%',
+    expRatioTarget: '0.35%',
+    expWaiverNote: 'Waiver expired Feb 5, 2026',
+    commissionCurrent: '5%',
+    commissionTarget: '5%',
+    commissionNote: 'Reduced from 23% → 5% on Nov 5, 2025',
+    feeWaived: false,
+    pctStaked: '100%',        // Source: etfs.grayscale.com/gsol, Mar 27 2026
+    grossYield: '7.01%',      // Source: etfs.grayscale.com/gsol, Mar 27 2026
+    netYield: '5.63%',        // Source: etfs.grayscale.com/gsol, Mar 27 2026
+    staticAum: 195_320_000,
+    staticPrice: 6.15,        // Fri Mar 27 close
+    description: 'Formerly Grayscale Solana Trust; converted to ETF Jan 5, 2026. 5% commission on staking rewards (reduced from 23%).'
+  },
+  {
+    ticker: 'FSOL',
+    issuer: 'Fidelity',
+    exchange: 'NYSE Arca',
+    expRatioCurrent: '0% (waived)',
+    expRatioTarget: '0.25%',
+    expWaiverNote: 'Both fees waived through May 18, 2026',
+    commissionCurrent: '0% (waived)',
+    commissionTarget: '15%',
+    commissionNote: 'Waived through May 18, 2026; 15% target post-waiver',
+    feeWaived: true,
+    pctStaked: 'N/A*',        // * Fidelity does not publicly disclose % staked
+    grossYield: '~7.0%',
+    netYield: '~7.0%',        // Net ≈ gross during waiver period (no fees applied)
+    staticAum: 156_230_000,
+    staticPrice: 9.76,        // Fri Mar 27 close
+    description: 'Launched Nov 18, 2025. Both management fee and staking commission waived through May 18, 2026. % staked not publicly disclosed.'
+  },
+  {
+    ticker: 'VSOL',
+    issuer: 'VanEck',
+    exchange: 'Cboe BZX',
+    expRatioCurrent: '0.30%',
+    expRatioTarget: '0.30%',
+    expWaiverNote: 'Waiver expired Feb 17, 2026',
+    commissionCurrent: 'N/A*',
+    commissionTarget: 'N/A*',
+    commissionNote: 'Not separately disclosed; reflected in NAV',
+    feeWaived: false,
+    pctStaked: 'N/A*',        // Not publicly disclosed
+    grossYield: '6.03%',      // Source: vaneck.com VSOL page, Mar 27 2026
+    netYield: 'N/A*',
+    staticAum: 150_000_000,
+    staticPrice: 10.91,       // Fri Mar 27 close
+    description: 'Uses SOL Strategies as staking provider. Staking rewards reflected in share price. Commission not separately disclosed.'
+  },
+  {
+    ticker: 'TSOL',
+    issuer: '21Shares',
+    exchange: 'Cboe BZX',
+    expRatioCurrent: '0.21%',
+    expRatioTarget: '0.21%',
+    expWaiverNote: null,
+    commissionCurrent: 'N/A*',
+    commissionTarget: 'N/A*',
+    commissionNote: 'Distributes rewards to shareholders monthly',
+    feeWaived: false,
+    pctStaked: '99.77%',      // Source: 21shares.com TSOL page (utilization rate)
+    grossYield: '~7.0%',
+    netYield: '~6.7%',        // Based on $0.016962/share Mar 2026 distribution
+    staticAum: 29_980_000,
+    staticPrice: 8.00,        // Fri Mar 27 close
+    description: 'Distributes staking rewards monthly ($0.016962/share in Mar 2026). 99.77% utilization rate. CME CF Solana-Dollar Reference Rate.'
+  },
+  {
+    ticker: 'SOLC',
+    issuer: 'Canary Capital',
+    exchange: 'NASDAQ',
+    expRatioCurrent: '0.50%',
+    expRatioTarget: '0.50%',
+    expWaiverNote: null,
+    commissionCurrent: 'N/A*',
+    commissionTarget: 'N/A*',
+    commissionNote: 'Marinade Finance liquid staking; not separately disclosed',
+    feeWaived: false,
+    pctStaked: 'N/A*',
+    grossYield: '~7.0%',
+    netYield: 'N/A*',
+    staticAum: 1_610_000,
+    staticPrice: 16.27,       // Fri Mar 27 close
+    description: 'Smallest by AUM. Partners with Marinade Finance for liquid staking. Highest expense ratio of the group.'
+  }
+];
+
+// ─── State ───
+let liveData   = {};  // ticker → { aum, price, source }
+let countdownN = 60;
+let countdownT;
+let isLoading  = false;
+
+// ─── Yahoo Finance fetch ───
+async function fetchYahoo(ticker) {
+  const result = { source: 'static' };
+
+  // 1. quoteSummary: totalAssets + price module
+  try {
+    const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${ticker}?modules=defaultKeyStatistics,price`;
+    const res = await fetch(url, { headers: { Accept: 'application/json' } });
+    if (res.ok) {
+      const j = await res.json();
+      const r  = j?.quoteSummary?.result?.[0];
+      const aum   = r?.defaultKeyStatistics?.totalAssets?.raw;
+      const price = r?.price?.regularMarketPrice?.raw;
+      if (aum || price) {
+        if (aum)   result.aum    = aum;
+        if (price) result.price  = price;
+        result.source = 'live';
+        return result;
+      }
+    }
+  } catch (_) {}
+
+  // 2. v8 chart endpoint for price
+  try {
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=1d`;
+    const res = await fetch(url, { headers: { Accept: 'application/json' } });
+    if (res.ok) {
+      const j = await res.json();
+      const meta = j?.chart?.result?.[0]?.meta;
+      if (meta?.regularMarketPrice) {
+        result.price  = meta.regularMarketPrice;
+        result.source = 'price-only';
+      }
+    }
+  } catch (_) {}
+
+  return result;
+}
+
+// ─── SOL spot price ───
+async function fetchSolPrice() {
+  try {
+    const url = 'https://query1.finance.yahoo.com/v8/finance/chart/SOL-USD?interval=1d&range=1d';
+    const res = await fetch(url, { headers: { Accept: 'application/json' } });
+    if (res.ok) {
+      const j = await res.json();
+      const p = j?.chart?.result?.[0]?.meta?.regularMarketPrice;
+      if (p) document.getElementById('solPrice').textContent = '$' + p.toFixed(2);
+    }
+  } catch (_) {}
+}
+
+// ─── Helpers ───
+function fmt$(n) {
+  if (!n) return '—';
+  if (n >= 1e9) return `$${(n/1e9).toFixed(2)}B`;
+  if (n >= 1e6) return `$${(n/1e6).toFixed(1)}M`;
+  return `$${n.toLocaleString()}`;
+}
+function fmtP(p) { return p ? `$${p.toFixed(2)}` : '—'; }
+
+// ─── Render ───
+function renderTable() {
+  // Build rows — data is already sorted by static AUM desc; re-sort by live AUM if available
+  const sorted = [...ETF_DATA].sort((a, b) => {
+    const aumA = liveData[a.ticker]?.aum ?? a.staticAum;
+    const aumB = liveData[b.ticker]?.aum ?? b.staticAum;
+    return aumB - aumA;
+  });
+
+  let totalAum = 0;
+  const rows = sorted.map((etf, i) => {
+    const d = liveData[etf.ticker] || {};
+    const isLive = d.source === 'live';
+    const isPriceOnly = d.source === 'price-only';
+
+    const aum   = isLive ? (d.aum ?? etf.staticAum) : etf.staticAum;
+    const price = (isLive || isPriceOnly) ? (d.price ?? etf.staticPrice) : etf.staticPrice;
+    if (aum) totalAum += aum;
+
+    const aumHtml = isLive && d.aum
+      ? `<span class="aum aum-live">${fmt$(d.aum)} <small style="font-size:10px;color:var(--green)">● LIVE</small></span>`
+      : `<span class="aum aum-static">${fmt$(etf.staticAum)} <small style="font-size:10px;color:var(--yellow)">● Mar 27</small></span>`;
+
+    const priceIsLive = (isLive || isPriceOnly) && d.price;
+    const priceHtml = priceIsLive
+      ? `<span class="price-live">${fmtP(d.price)} <small style="font-size:10px;color:var(--green)">● LIVE</small></span>`
+      : `<span class="price-static">${fmtP(etf.staticPrice)} <small style="font-size:10px;color:var(--yellow)">● Fri close</small></span>`;
+
+    const expHtml = etf.feeWaived
+      ? `<span class="fee-waived">${etf.expRatioCurrent}</span>${etf.expWaiverNote ? `<span class="sub-note-green">↳ ${etf.expWaiverNote}</span>` : ''}`
+      : `<span class="fee">${etf.expRatioCurrent}</span>${etf.expWaiverNote ? `<span class="sub-note">↳ ${etf.expWaiverNote}</span>` : ''}`;
+
+    const commHtml = etf.feeWaived
+      ? `<span class="fee-waived">${etf.commissionCurrent}</span><span class="sub-note-green">↳ ${etf.commissionNote || ''}</span>`
+      : `<span>${etf.commissionCurrent}</span>${etf.commissionNote ? `<span class="sub-note">↳ ${etf.commissionNote}</span>` : ''}`;
+
+    const badge = etf.feeWaived
+      ? `<span class="staking-badge staking-waived-badge">✓ Waived</span>`
+      : `<span class="staking-badge staking-active-badge">✓ Active</span>`;
+
+    const rowClass = etf.feeWaived ? '' : 'staking-yes';
+
+    const pctStakedHtml = etf.pctStaked === 'N/A*'
+      ? `<span class="pct-muted">N/A <span title="Not publicly disclosed by issuer" style="cursor:help">ⓘ</span></span>`
+      : `<span class="pct-green">${etf.pctStaked}</span>`;
+
+    return `<tr class="${rowClass}" title="${etf.description}">
+      <td style="color:var(--text-muted);font-size:12px">${i+1}</td>
+      <td><span class="ticker">${etf.ticker}</span></td>
+      <td><span class="issuer">${etf.issuer}</span></td>
+      <td style="color:var(--text-muted)">${etf.exchange}</td>
+      <td>${aumHtml}</td>
+      <td>${priceHtml}</td>
+      <td>${expHtml}</td>
+      <td style="color:var(--text-muted)">${etf.expRatioTarget}</td>
+      <td>${badge}</td>
+      <td>${commHtml}</td>
+      <td style="color:var(--text-muted)">${etf.commissionTarget}</td>
+      <td>${pctStakedHtml}</td>
+      <td class="pct-green">${etf.grossYield}</td>
+      <td class="pct-green">${etf.netYield}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('etfBody').innerHTML = rows;
+
+  const el = document.getElementById('totalAum');
+  el.textContent = fmt$(totalAum);
+}
+
+// ─── Refresh ───
+async function doRefresh() {
+  if (isLoading) return;
+  isLoading = true;
+  clearInterval(countdownT);
+  countdownN = 60;
+  document.getElementById('countdown').textContent = '60';
+  document.getElementById('refreshBtn').classList.add('spinning');
+
+  const tasks = ETF_DATA.map(async etf => {
+    const d = await fetchYahoo(etf.ticker);
+    liveData[etf.ticker] = d;
+  });
+  await Promise.allSettled([...tasks, fetchSolPrice()]);
+
+  renderTable();
+
+  const now = new Date();
+  document.getElementById('lastUpdated').textContent =
+    `Updated ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
+
+  document.getElementById('refreshBtn').classList.remove('spinning');
+  isLoading = false;
+
+  countdownT = setInterval(() => {
+    countdownN--;
+    document.getElementById('countdown').textContent = countdownN;
+    if (countdownN <= 0) doRefresh();
+  }, 1000);
+}
+
+doRefresh();
+</script>
+</body>
+</html>
